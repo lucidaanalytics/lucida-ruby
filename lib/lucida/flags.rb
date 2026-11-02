@@ -5,9 +5,9 @@ module Lucida
   # flags the definitions cannot decide (cohorts etc.), unless only_evaluate_locally.
   module Flags
     # reason is the evaluator's (local) or the server's (remote) reason string.
-    FlagResult = Struct.new(:key, :value, :payload, :reason, :locally_evaluated, :request_id) do
+    # condition_index is -1 when no condition decided; reason is "fallback" for a `fallbacks:` value.
+    FlagResult = Struct.new(:key, :value, :payload, :reason, :locally_evaluated, :request_id, :condition_index, :variant) do
       def enabled? = value != false
-      def variant = value.is_a?(String) ? value : nil
     end
 
     # Fetches definitions (needs secret_key). Keeps the previous ones on any failure.
@@ -40,15 +40,20 @@ module Lucida
       @defs = flags
     end
 
-    # Full result (value, payload, reason) or nil when unknown / undecidable. Records exposure unless send_exposure: false.
+    # Full result (value, payload, variant, reason, condition_index, request_id, locally_evaluated) or nil when unknown /
+    # undecidable and `fallbacks:` has no value for the key (a fallback has reason "fallback" and records no exposure).
+    # Records exposure unless send_exposure: false.
     def get_feature_flag_result(key, distinct_id = nil, send_exposure: true, **opts)
       id = distinct_id || Context.current[:distinct_id]
       return nil if @disabled || id.nil?
 
       r = resolve(key, id, opts)
+      return FlagResult.new(key, @fallbacks[key], nil, "fallback", false, nil, -1, nil) if r.nil? && @fallbacks.key?(key)
+
       expose(id, r) if r && send_exposure
       r
     end
+    alias get_feature_flag_details get_feature_flag_result
 
     # False, true or a variant key; nil when unknown or undecidable.
     def get_feature_flag(key, distinct_id = nil, **opts) = get_feature_flag_result(key, distinct_id, **opts)&.value
@@ -114,7 +119,7 @@ module Lucida
     def only_local?(o) = o.fetch(:only_evaluate_locally, @only_local)
 
     def local_result(r, key)
-      FlagResult.new(key, r.value, r.payload, r.reason, true, nil)
+      FlagResult.new(key, r.value, r.payload, r.reason, true, nil, r.condition_index, r.variant)
     end
 
     # Locally decided results; second element is true when something needs the server (or no definitions yet).
@@ -165,7 +170,8 @@ module Lucida
       j["flags"].to_h do |k, f|
         v = f["value"]
         v = f["variant"] || (f["enabled"] ? true : false) if v.nil?
-        [k, FlagResult.new(k, v, f["payload"], f["reason"] || "remote", false, j["request_id"])]
+        [k, FlagResult.new(k, v, f["payload"], f["reason"] || "remote", false, j["request_id"],
+                           f["condition_index"] || -1, f["variant"])]
       end
     end
 

@@ -31,13 +31,14 @@ module Lucida
     # on_error: ->(Lucida::Error) for batches that were dropped or could not be delivered.
     # before_send: ->(event_hash) returning the event to send, nil to drop it; raising keeps the original.
     # flush_at triggers a flush; max_batch_size caps one request. flush_interval/flag_poll_interval of 0 disable the threads.
+    # fallbacks: { flag_key => value } served (reason "fallback", no exposure) when a flag read fails or the flag is unknown.
     # sync_mode: send each event inline (no queue, no thread). test_mode: fixture (path, Hash or Array); offline,
     #   events land in `sink.events`.
     def initialize(api_key, host: "https://app.lucida.dev", secret_key: nil, flush_at: 20, max_queue_size: 1000,
                    max_batch_size: 100, flush_interval: 5, flag_poll_interval: 30, max_retries: 3, retry_delay: 0.5,
                    timeout: 10, debug: false, logger: nil, on_error: nil, before_send: nil, sync_mode: false,
                    only_evaluate_locally: false, disabled: false, transport: nil, sleeper: nil, test_mode: nil,
-                   app_contexts: nil, flag_definition_cache: nil)
+                   app_contexts: nil, flag_definition_cache: nil, fallbacks: {})
       @api_key = api_key
       @host = host.sub(%r{/+\z}, "")
       @secret = secret_key
@@ -56,6 +57,7 @@ module Lucida
       @disabled = disabled
       @app_contexts = app_contexts
       @flag_cache = flag_definition_cache
+      @fallbacks = (fallbacks || {}).transform_keys(&:to_s)
       @transport = test_mode ? TestMode.no_network : transport
       @sleeper = sleeper || method(:sleep)
       @logger = logger ? ->(m) { logger.debug(m) } : (debug ? Logger.new($stderr).method(:debug) : nil)

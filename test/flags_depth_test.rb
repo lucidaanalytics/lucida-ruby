@@ -77,4 +77,20 @@ class FlagsDepthTest < Minitest::Test
     assert_nil lc.get_remote_config_payload("nope")
     assert_raises(ArgumentError) { Lucida::Client.new("k", flush_interval: 0).get_remote_config_payload("cfg") }
   end
+
+  def test_fallbacks
+    lc = Lucida::Client.new("k", secret_key: "s", test_mode: flags, fallbacks: { "ghost" => "safe" })
+    d = lc.get_feature_flag_details("ghost", "u")
+    assert_equal "safe", d.value
+    assert_equal "fallback", d.reason
+    served = lc.get_feature_flag_details("a", "u")
+    assert_equal [true, "condition_match", 0], [served.value, served.reason, served.condition_index]
+    assert_nil lc.get_feature_flag("nope", "u")
+    lc.sink.clear
+    lc.get_feature_flag("ghost", "u")
+    assert_empty lc.sink.events
+    down = Lucida::Client.new("k", flag_poll_interval: 0, flush_interval: 0, fallbacks: { "x" => "down" },
+                                   transport: ->(*) { 503 }, sleeper: ->(_) {})
+    assert_equal "fallback", down.get_feature_flag_details("x", "u").reason
+  end
 end

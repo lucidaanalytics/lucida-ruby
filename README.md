@@ -61,6 +61,13 @@ The stack is Thread/Fiber-local. The tracing headers are client-controlled (stri
   (`{"flags" =>, "payloads" =>}`), and `get_feature_flag_result` (a `FlagResult` with `value`, `payload`, `reason`,
   `locally_evaluated`, `request_id`). Single-flag calls record `$feature_flag_called` and `$exposure` once per user, flag and value.
 
+### Fallbacks and details
+
+`Lucida::Client.new("k", fallbacks: { "new-nav" => false, "plan" => "free" })`: when a read fails (network error, no
+definitions, quota limit, unknown flag) and the key is listed, the flag returns that value with reason `fallback` and
+records no exposure. `get_feature_flag_details(key, id)` (same as `get_feature_flag_result`) returns a `FlagResult` with
+`value`, `payload`, `variant`, `reason`, `condition_index`, `request_id` and `locally_evaluated`.
+
 ## Test mode
 
 ```ruby
