@@ -3,10 +3,22 @@
 Server SDK for Lucida, standard library only (Ruby >= 3.1). Pass a `distinct_id` on every call, or set one for the
 current request with `Lucida.with_context`.
 
+## Install
+
+From GitHub, [lucidaanalytics/lucida-ruby](https://github.com/lucidaanalytics/lucida-ruby), release `v0.1.0`:
+
+```ruby
+# Gemfile
+gem "lucida", git: "https://github.com/lucidaanalytics/lucida-ruby.git", tag: "v0.1.0"
+```
+
+The release also attaches the built `.gem`. `gem install lucida` / `gem "lucida"` from RubyGems is coming.
+
+
 ```ruby
 require "lucida"
 
-lc = Lucida::Client.new("lc_pk_...", host: "https://app.lucida.dev", secret_key: "lc_sk_...")
+lc = Lucida::Client.new("lc_pk_...", host: "https://capture.lucidace.com", secret_key: "lc_sk_...")
 lc.capture("u1", "purchase", { "total" => 12 }, groups: { "company" => "acme" })
 lc.identify("u1", { "plan" => "pro" })
 lc.alias("u1", "anon-9")
