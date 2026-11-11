@@ -15,7 +15,7 @@ require_relative "lucida/flags"
 # Server SDK for Lucida (stdlib only). Pass a distinct_id on every call, or set one for the request with
 # Lucida.with_context.
 module Lucida
-  VERSION = "0.1.0"
+  VERSION = "0.1.1"
   LIB = "lucida-ruby"
 
   # rubocop:disable Metrics/ClassLength
@@ -99,9 +99,10 @@ module Lucida
 
     # An identical call (same id and properties) already sent by this client is skipped.
     def identify(distinct_id, properties = nil, properties_set_once = nil)
-      return unless first_identity?("identify", distinct_id, properties, properties_set_once)
+      uuid = identity_uuid("identify", distinct_id, properties, properties_set_once)
+      return unless uuid
 
-      capture(distinct_id, "$identify", set: properties, set_once: properties_set_once)
+      capture(distinct_id, "$identify", uuid: uuid, set: properties, set_once: properties_set_once)
     end
 
     def alias(distinct_id, alias_id)
@@ -109,10 +110,11 @@ module Lucida
     end
 
     def group_identify(group_type, group_key, properties = nil, distinct_id = nil)
-      return unless first_identity?("group", group_type, group_key, distinct_id, properties)
+      uuid = identity_uuid("group", group_type, group_key, distinct_id, properties)
+      return unless uuid
 
       capture(distinct_id || "$#{group_type}_#{group_key}", "$groupidentify",
-              { "$group_type" => group_type, "$group_key" => group_key, "$group_set" => properties || {} })
+              { "$group_type" => group_type, "$group_key" => group_key, "$group_set" => properties || {} }, uuid: uuid)
     end
 
     private

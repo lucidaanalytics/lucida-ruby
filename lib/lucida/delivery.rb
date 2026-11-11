@@ -51,11 +51,13 @@ module Lucida
 
     # Historical import via POST /v1/s2s/batch (secret key, caller timestamps kept), chunks of 1000.
     # Events are hashes with distinct_id, event and optional properties/timestamp/uuid/set/set_once.
-    def import_events(events)
+    # Default properties, context properties and before_send apply (an event the hook drops is not sent);
+    # `raw: true` sends the events as given.
+    def import_events(events, raw: false)
       raise Error, "import_events requires secret_key" unless @secret
       return 0 if @disabled
 
-      wire = events.map { |e| import_wire(e) }
+      wire = events.filter_map { |e| import_wire(e, raw) }
       return wire.each { |w| @sink.add(w) }.size if @sink
 
       sent = 0
@@ -73,27 +75,34 @@ module Lucida
 
     def ok?(res) = res.status.between?(200, 299)
 
-    def import_wire(e)
+    def import_wire(e, raw)
       g = ->(k) { e[k] || e[k.to_s] }
-      build_event(g.call(:distinct_id), g.call(:event), g.call(:properties), timestamp: g.call(:timestamp),
-                  uuid: g.call(:uuid), set: g.call(:set), set_once: g.call(:set_once))
+      props = raw ? g.call(:properties) : @mutex.synchronize { super_props.dup }.merge(g.call(:properties) || {})
+      event = build_event(g.call(:distinct_id), g.call(:event), props, timestamp: g.call(:timestamp),
+                                                                       uuid: g.call(:uuid), set: g.call(:set), set_once: g.call(:set_once))
+      raw ? event : apply_before_send(event)
     end
 
     def enqueue(event)
       event = apply_before_send(event)
       return if event.nil?
       return @sink.add(event) && nil if @sink
-      return send_batch([event]) && nil if @sync_mode
+      if @sync_mode
+        release_identities([event]) unless send_batch([event])
+        return nil
+      end
 
       after_fork if @pid && @pid != Process.pid
+      dropped = nil
       n = @mutex.synchronize do
         if @queue.size >= @max
-          @queue.shift
+          dropped = @queue.shift
           @dropped_events += 1
         end
         @queue << event
         @queue.size
       end
+      release_identities([dropped]) if dropped
       flush if n >= @flush_at
       nil
     end
@@ -112,6 +121,7 @@ module Lucida
       return true if ok?(res)
 
       retry_later = Wire.retryable?(res.status)
+      release_identities(batch) unless retry_later
       report(Error.new("batch of #{batch.size} events #{retry_later ? 'kept for next flush' : 'dropped'}: " \
                        "status #{res.status}", res.status))
       !retry_later

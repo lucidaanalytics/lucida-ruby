@@ -31,15 +31,32 @@ module Lucida
 
     def super_props = (@super_props ||= {})
 
-    # True the first time this exact call (kind, id, properties) is seen by the client; bounded LRU.
-    def first_identity?(*parts)
+    # The uuid to send an identify/group event under the first time this exact call (kind, id, properties) is seen
+    # by the client (bounded LRU), else nil. #release_identities frees it again when the event is dropped.
+    def identity_uuid(*parts)
       key = Digest::SHA256.hexdigest(JSON.generate(parts))
       @mutex.synchronize do
         seen = (@identities ||= {})
         fresh = !seen.delete(key)
         seen[key] = true
         seen.shift if seen.size > DEDUPE_SIZE
-        fresh
+        next nil unless fresh
+
+        uuid = Wire.uuid7
+        keys = (@identity_keys ||= {})
+        keys[uuid] = key
+        keys.shift if keys.size > DEDUPE_SIZE
+        uuid
+      end
+    end
+
+    # Forget the calls whose events were dropped (rejected batch, full queue) so repeating them is sent again.
+    def release_identities(events)
+      @mutex.synchronize do
+        events.each do |e|
+          key = @identity_keys&.delete(e["uuid"])
+          @identities&.delete(key) if key
+        end
       end
     end
   end

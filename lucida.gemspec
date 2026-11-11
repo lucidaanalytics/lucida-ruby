@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |s|
   s.name = "lucida"
-  s.version = "0.1.0"
+  s.version = "0.1.1"
   s.summary = "Lucida server SDK: capture, batch, identify, local flag evaluation"
   s.license = "Apache-2.0"
   s.homepage = "https://github.com/lucidaanalytics/lucida-ruby"
